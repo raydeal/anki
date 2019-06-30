@@ -945,7 +945,7 @@ class EditorWebView(AnkiWebView):
         # if there's more than one consecutive space,
         # use non-breaking spaces for the second one on
         def repl(match):
-            return " " + match.group(1).replace(" ", "&nbsp;")
+            return match.group(1).replace(" ", "&nbsp;") + " "
         txt = re.sub(" ( +)", repl, txt)
 
         return txt
@@ -991,7 +991,7 @@ class EditorWebView(AnkiWebView):
         # add a comment in the clipboard html so we can tell text is copied
         # from us and doesn't need to be stripped
         clip = self.editor.mw.app.clipboard()
-        if not clip.ownsClipboard():
+        if not isMac and not clip.ownsClipboard():
             return
         mime = clip.mimeData()
         if not mime.hasHtml():

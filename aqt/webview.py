@@ -6,7 +6,7 @@ import sys
 import math
 from anki.hooks import runHook
 from aqt.qt import *
-from aqt.utils import openLink, tooltip
+from aqt.utils import openLink
 from anki.utils import isMac, isWin, isLin
 from anki.lang import _
 
@@ -63,8 +63,10 @@ class AnkiWebPage(QWebEnginePage):
     def javaScriptConsoleMessage(self, lvl, msg, line, srcID):
         # not translated because console usually not visible,
         # and may only accept ascii text
-        sys.stdout.write("JS error on line %(a)d: %(b)s" %
-             dict(a=line, b=msg+"\n"))
+        buf = "JS error on line %(a)d: %(b)s" % dict(a=line, b=msg+"\n")
+        # ensure we don't try to write characters the terminal can't handle
+        buf = buf.encode(sys.stdout.encoding, "backslashreplace").decode(sys.stdout.encoding)
+        sys.stdout.write(buf)
 
     def acceptNavigationRequest(self, url, navType, isMainFrame):
         if not isMainFrame:
@@ -75,7 +77,7 @@ class AnkiWebPage(QWebEnginePage):
         # catch buggy <a href='#' onclick='func()'> links
         from aqt import mw
         if url.matches(QUrl(mw.serverURL()), QUrl.RemoveFragment):
-            sys.stderr.write("onclick handler needs to return false\n")
+            print("onclick handler needs to return false")
             return False
         # load all other links in browser
         openLink(url)
@@ -170,6 +172,9 @@ class AnkiWebView(QWebEngineView):
         pass
 
     def setHtml(self, html):
+        # discard any previous pending actions
+        self._pendingActions = []
+        self._domDone = True
         self._queueAction("setHtml", html)
 
     def _setHtml(self, html):
@@ -228,10 +233,15 @@ class AnkiWebView(QWebEngineView):
             css = []
         if js is None:
             js = ["jquery.js"]
+
+        palette = self.style().standardPalette()
+        color_hl = palette.color(QPalette.Highlight).name()
+
         if isWin:
             #T: include a font for your language on Windows, eg: "Segoe UI", "MS Mincho"
             family = _('"Segoe UI"')
             widgetspec = "button { font-size: 12px; font-family:%s; }" % family
+            widgetspec += "\n:focus { outline: 1px solid %s; }" % color_hl
             fontspec = 'font-size:12px;font-family:%s;' % family
         elif isMac:
             family="Helvetica"
@@ -241,9 +251,7 @@ class AnkiWebView(QWebEngineView):
 button { font-size: 13px; -webkit-appearance: none; background: #fff; border: 1px solid #ccc;
 border-radius:5px; font-family: Helvetica }"""
         else:
-            palette = self.style().standardPalette()
             family = self.font().family()
-            color_hl = palette.color(QPalette.Highlight).name()
             color_hl_txt = palette.color(QPalette.HighlightedText).name()
             color_btn = palette.color(QPalette.Button).name()
             fontspec = 'font-size:14px;font-family:"%s";'% family
@@ -345,13 +353,13 @@ body {{ zoom: {}; background: {}; {} }}
         return False
 
     def _onBridgeCmd(self, cmd):
-        if not self._filterSet:
-            self.focusProxy().installEventFilter(self)
-            self._filterSet = True
-
         if self._shouldIgnoreWebEvent():
             print("ignored late bridge cmd", cmd)
             return
+
+        if not self._filterSet:
+            self.focusProxy().installEventFilter(self)
+            self._filterSet = True
 
         if cmd == "domDone":
             self._domDone = True
@@ -370,9 +378,8 @@ body {{ zoom: {}; background: {}; {} }}
 
     def _onHeight(self, qvar):
         if qvar is None:
-            tooltip(_("Error connecting to local port. Retrying..."))
             from aqt import mw
-            mw.progress.timer(2000, mw.reset, False)
+            mw.progress.timer(1000, mw.reset, False)
             return
 
         height = math.ceil(qvar*self.zoomFactor())

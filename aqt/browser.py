@@ -1127,6 +1127,8 @@ by clicking on one on the left."""))
         info, cs = self._cardInfoData()
         reps = self._revlogData(cs)
         class CardInfoDialog(QDialog):
+            silentlyClose = True
+
             def reject(self):
                 saveGeom(self, "revlog")
                 return QDialog.reject(self)
@@ -1263,6 +1265,7 @@ where id in %s""" % ids2str(sf))
 
     def _openPreview(self):
         self._previewState = "question"
+        self._lastPreviewState = None
         self._previewWindow = QDialog(None, Qt.Window)
         self._previewWindow.setWindowTitle(_("Preview"))
 
@@ -1297,9 +1300,9 @@ where id in %s""" % ids2str(sf))
         self.previewShowBothSides.setShortcut(QKeySequence("B"))
         self.previewShowBothSides.setToolTip(_("Shortcut key: %s" % "B"))
         bbox.addButton(self.previewShowBothSides, QDialogButtonBox.ActionRole)
-        self.previewShowBothSides.toggled.connect(self._onPreviewShowBothSides)
         self._previewBothSides = self.col.conf.get("previewBothSides", False)
         self.previewShowBothSides.setChecked(self._previewBothSides)
+        self.previewShowBothSides.toggled.connect(self._onPreviewShowBothSides)
 
         self._setupPreviewWebview()
 
@@ -1385,6 +1388,7 @@ where id in %s""" % ids2str(sf))
         if not c or not self.singleCard:
             txt = _("(please select 1 card)")
             bodyclass = ""
+            self._lastPreviewState = None
         else:
             if self._previewBothSides:
                 self._previewState = "answer"
@@ -1422,7 +1426,7 @@ where id in %s""" % ids2str(sf))
             txt = mungeQA(self.col, txt)
             txt = runFilter("prepareQA", txt, c,
                             "preview"+self._previewState.capitalize())
-        self._lastPreviewState = self._previewStateAndMod()
+            self._lastPreviewState = self._previewStateAndMod()
         self._updatePreviewButtons()
         self._previewWeb.eval(
             "{}({},'{}');".format(func, json.dumps(txt), bodyclass))
@@ -1437,7 +1441,9 @@ where id in %s""" % ids2str(sf))
 
     def _previewStateAndMod(self):
         c = self.card
-        return (self._previewState, c.id, c.note().mod)
+        n = c.note()
+        n.load()
+        return (self._previewState, c.id, n.mod)
 
     # Card deletion
     ######################################################################

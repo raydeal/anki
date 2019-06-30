@@ -90,10 +90,6 @@ from anki.mpv import MPV, MPVBase
 
 mpvPath, mpvEnv = _packagedCmd(["mpv"])
 
-def setMpvConfigBase(base):
-    global mpvEnv
-    mpvEnv['XDG_CONFIG_HOME'] = base
-
 class MpvManager(MPV):
 
     executable = mpvPath[0]
@@ -125,6 +121,13 @@ class MpvManager(MPV):
     def on_idle(self):
         runHook("mpvIdleHook")
 
+def setMpvConfigBase(base):
+    mpvConfPath = os.path.join(base, "mpv.conf")
+    MpvManager.default_argv += [
+        "--no-config",
+        "--include="+mpvConfPath,
+    ]
+
 mpvManager = None
 
 def setupMPV():
@@ -132,6 +135,7 @@ def setupMPV():
     mpvManager = MpvManager()
     _player = mpvManager.queueFile
     _queueEraser = mpvManager.clearQueue
+    atexit.register(cleanupMPV)
 
 def cleanupMPV():
     global mpvManager, _player, _queueEraser
@@ -164,8 +168,8 @@ def cleanupOldMplayerProcesses():
 
             print("terminating old mplayer process...")
             proc.kill()
-        except SystemError:
-            pass
+        except:
+            print("error iterating mplayer processes")
 
 mplayerCmd = ["mplayer", "-really-quiet", "-noautosub"]
 if isWin:
